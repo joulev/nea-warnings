@@ -1,0 +1,19 @@
+{
+  "name": "nea-warnings",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch index.ts",
+    "start": "NODE_ENV=production bun run index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "fast-xml-parser": "4.5.0",
+    "zod": "3.23.8"
+  }
+}
