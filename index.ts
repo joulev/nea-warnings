@@ -5,8 +5,8 @@ const parser = new XMLParser();
 const FEED_URL = "https://www.weather.gov.sg/files/rss/rssHeavyRain_new.xml";
 
 const ENV_SCHEMA = z.object({
-  WEBHOOK_SUCCESS_URL: z.string().url(),
-  WEBHOOK_FAILURE_URL: z.string().url(),
+  WEBHOOK_MAIN_URL: z.string().url(),
+  WEBHOOK_LOG_URL: z.string().url(),
 });
 const env = ENV_SCHEMA.parse(process.env);
 
@@ -20,17 +20,25 @@ const XML_SCHEMA = z.object({
 let lastUpdated: Date | null = null;
 let failedPreviousRun = false;
 
-async function pingDiscord(message: string, error = false) {
-  const content = !error
-    ? message
-    : `Rain warning webhook failed:\n\`\`\`\n${message}\n\`\`\``;
-  if (process.env.DISABLE_DISCORD === "true") return console.log(content);
-
-  const url = error ? env.WEBHOOK_FAILURE_URL : env.WEBHOOK_SUCCESS_URL;
-  await fetch(url, {
+async function log(message: string, type: "info" | "error" = "info") {
+  if (process.env.DISABLE_DISCORD === "true") return console.log(message);
+  await fetch(env.WEBHOOK_LOG_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({
+      content: `${
+        type === "info" ? "NEA Warning Log" : "NEA Warning Error"
+      }:\n\`\`\`\n${message}\n\`\`\``,
+    }),
+  });
+}
+
+async function pingDiscord(message: string) {
+  if (process.env.DISABLE_DISCORD === "true") return console.log(message);
+  await fetch(env.WEBHOOK_MAIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: message }),
   });
 }
 
@@ -48,14 +56,15 @@ async function checkFeed() {
   } catch (e) {
     if (failedPreviousRun) return;
     failedPreviousRun = true;
-    await pingDiscord(
+    await log(
       e instanceof Error ? e.message : "Unknown error occurred",
-      true
+      "error"
     );
   } finally {
     lastUpdated = new Date();
   }
 }
 
+await log("Starting NEA Warning Listener");
 checkFeed();
 if (process.env.NODE_ENV === "production") setInterval(checkFeed, 1000 * 60); // 1 minute
