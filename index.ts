@@ -19,6 +19,7 @@ const XML_SCHEMA = z.object({
 
 let lastUpdated: Date | null = null;
 let failedPreviousRun = false;
+const DELAY = 1000 * 60; // 1 minute
 
 async function log(message: string, type: "info" | "error" = "info") {
   if (process.env.DISABLE_DISCORD === "true") return console.log(message);
@@ -47,7 +48,8 @@ async function checkFeed() {
     const response = await fetch(FEED_URL).then((r) => r.text());
     const xmlObj = parser.parse(response);
     const { feed } = XML_SCHEMA.parse(xmlObj);
-    if (lastUpdated && lastUpdated > feed.updated) return;
+    if (lastUpdated && lastUpdated.valueOf() > feed.updated.valueOf() + DELAY)
+      return;
 
     const { summary } = feed.entry;
     console.log(`${new Date().toISOString()} - ${summary}`);
@@ -55,17 +57,17 @@ async function checkFeed() {
     if (summary === "NIL") return;
     await pingDiscord(summary);
     failedPreviousRun = false;
-    lastUpdated = feed.updated;
   } catch (e) {
     if (failedPreviousRun) return;
     failedPreviousRun = true;
     const message = e instanceof Error ? e.message : "Unknown error occurred";
     console.log(`${new Date().toISOString()} - Error: ${message}`);
     await log(message, "error");
+  } finally {
     lastUpdated = new Date();
   }
 }
 
 await log("Starting NEA Warning Listener");
 checkFeed();
-if (process.env.NODE_ENV === "production") setInterval(checkFeed, 1000 * 60); // 1 minute
+if (process.env.NODE_ENV === "production") setInterval(checkFeed, DELAY);
