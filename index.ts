@@ -50,17 +50,18 @@ async function checkFeed() {
     if (lastUpdated && lastUpdated > feed.updated) return;
 
     const { summary } = feed.entry;
+    console.log(`${new Date().toISOString()} - ${summary}`);
+
     if (summary === "NIL") return;
     await pingDiscord(summary);
     failedPreviousRun = false;
+    lastUpdated = feed.updated;
   } catch (e) {
     if (failedPreviousRun) return;
     failedPreviousRun = true;
-    await log(
-      e instanceof Error ? e.message : "Unknown error occurred",
-      "error"
-    );
-  } finally {
+    const message = e instanceof Error ? e.message : "Unknown error occurred";
+    console.log(`${new Date().toISOString()} - Error: ${message}`);
+    await log(message, "error");
     lastUpdated = new Date();
   }
 }
