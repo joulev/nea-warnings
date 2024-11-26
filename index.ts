@@ -27,6 +27,10 @@ async function getFeed() {
   return feed;
 }
 
+function transformMessage(message: string) {
+  return message.replaceAll("  ", " ");
+}
+
 async function logError(message: string) {
   if (process.env.DISABLE_DISCORD === "true") return;
   await fetch(env.WEBHOOK_LOG_URL, {
@@ -47,15 +51,20 @@ async function pingDiscord(message: string) {
   });
 }
 
-async function checkFeed() {
+async function checkFeed(initialise = false) {
   process.stdout.write(`${new Date().toISOString()}... `);
   try {
     const feed = await getFeed();
+    if (initialise) {
+      lastProcessedEntryUpdatedField = feed.updated;
+      return console.log("Initialised");
+    }
+
     if (lastProcessedEntryUpdatedField === feed.updated)
       return console.log("No new updates");
 
     const { summary } = feed.entry;
-    if (summary !== "NIL") await pingDiscord(summary);
+    if (summary !== "NIL") await pingDiscord(transformMessage(summary));
 
     lastProcessedEntryUpdatedField = feed.updated;
     failedPreviousRun = false;
@@ -70,5 +79,5 @@ async function checkFeed() {
 }
 
 console.log("Starting NEA Warning Listener");
-checkFeed();
+checkFeed(true);
 if (process.env.NODE_ENV === "production") setInterval(checkFeed, 1000 * 60); // 1 minute
