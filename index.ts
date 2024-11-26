@@ -12,7 +12,7 @@ const env = ENV_SCHEMA.parse(process.env);
 
 const XML_SCHEMA = z.object({
   feed: z.object({
-    updated: z.string().date(),
+    updated: z.string().datetime({ offset: true }),
     entry: z.object({ summary: z.string() }),
   }),
 });
