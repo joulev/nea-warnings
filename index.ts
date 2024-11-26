@@ -12,30 +12,34 @@ const env = ENV_SCHEMA.parse(process.env);
 
 const XML_SCHEMA = z.object({
   feed: z.object({
-    updated: z.coerce.date(),
+    updated: z.string().date(),
     entry: z.object({ summary: z.string() }),
   }),
 });
 
-let lastUpdated: Date | null = null;
+let lastProcessedEntryUpdatedField: string | null;
 let failedPreviousRun = false;
-const DELAY = 1000 * 60; // 1 minute
 
-async function log(message: string, type: "info" | "error" = "info") {
-  if (process.env.DISABLE_DISCORD === "true") return console.log(message);
+async function getFeed() {
+  const response = await fetch(FEED_URL).then((r) => r.text());
+  const xmlObj = parser.parse(response);
+  const { feed } = XML_SCHEMA.parse(xmlObj);
+  return feed;
+}
+
+async function logError(message: string) {
+  if (process.env.DISABLE_DISCORD === "true") return;
   await fetch(env.WEBHOOK_LOG_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      content: `${
-        type === "info" ? "NEA Warning Log" : "NEA Warning Error"
-      }:\n\`\`\`\n${message}\n\`\`\``,
+      content: `NEA Warning Error:\n\`\`\`\n${message}\n\`\`\``,
     }),
   });
 }
 
 async function pingDiscord(message: string) {
-  if (process.env.DISABLE_DISCORD === "true") return console.log(message);
+  if (process.env.DISABLE_DISCORD === "true") return;
   await fetch(env.WEBHOOK_MAIN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -44,30 +48,27 @@ async function pingDiscord(message: string) {
 }
 
 async function checkFeed() {
+  process.stdout.write(`${new Date().toISOString()}... `);
   try {
-    const response = await fetch(FEED_URL).then((r) => r.text());
-    const xmlObj = parser.parse(response);
-    const { feed } = XML_SCHEMA.parse(xmlObj);
-    if (lastUpdated && lastUpdated.valueOf() > feed.updated.valueOf() + DELAY)
-      return;
+    const feed = await getFeed();
+    if (lastProcessedEntryUpdatedField === feed.updated)
+      return console.log("No new updates");
 
     const { summary } = feed.entry;
-    console.log(`${new Date().toISOString()} - ${summary}`);
+    if (summary !== "NIL") await pingDiscord(summary);
 
-    if (summary === "NIL") return;
-    await pingDiscord(summary);
+    lastProcessedEntryUpdatedField = feed.updated;
     failedPreviousRun = false;
+    console.log(summary);
   } catch (e) {
-    if (failedPreviousRun) return;
+    if (failedPreviousRun) return console.log("Failed again, skipping");
     failedPreviousRun = true;
     const message = e instanceof Error ? e.message : "Unknown error occurred";
-    console.log(`${new Date().toISOString()} - Error: ${message}`);
-    await log(message, "error");
-  } finally {
-    lastUpdated = new Date();
+    await logError(message);
+    console.log(`Error: ${message}`);
   }
 }
 
-await log("Starting NEA Warning Listener");
+console.log("Starting NEA Warning Listener");
 checkFeed();
-if (process.env.NODE_ENV === "production") setInterval(checkFeed, DELAY);
+if (process.env.NODE_ENV === "production") setInterval(checkFeed, 1000 * 60); // 1 minute
